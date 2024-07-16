@@ -5,64 +5,68 @@
 #include <string>
 #include <typeindex>
 #include <typeinfo>
+#include <functional>
 
-// Base annotation struct
-struct Annotation {
-    std::string value;
-};
+// Base annotation interface
+struct Annotation {};
 
 // Custom annotation derived from Annotation
 struct CustomAnnotation : public Annotation {
-    CustomAnnotation(const std::string& val) { value = val; }
+    std::string val;
+    CustomAnnotation(const std::string& val) : val(val) {}
 };
 
 // Base class to hold annotations
 class Annotable {
 public:
     // Static map to store annotations
-    static std::unordered_map<std::type_index, std::vector<std::pair<std::string, std::shared_ptr<Annotation>>>> annotations;
+    static std::unordered_map<std::string, std::weak_ptr<Annotation>> annotations;
+
+    template<class Class, typename Annotation>
+    static std::function getFunction() {
+        return nullptr;
+    }
 };
 
-// Initialize the static map
-std::unordered_map<std::type_index, std::vector<std::pair<std::string, std::shared_ptr<Annotation>>>> Annotable::annotations;
+// Helper function to create annotations
+bool createAnnotation(const std::string& key, Annotation* annotation) {
+    Annotable::annotations[key] = std::shared_ptr<Annotation>(annotation);
+    return true;
+}
 
-// Macro to annotate functions
-#define ANNOTATE(className, funcName, annotationType, annotationValue) \
-    namespace { \
-        static const bool funcName##_annotation_registered = []() { \
-            auto annotation = std::make_shared<annotationType>(annotationValue); \
-            Annotable::annotations[typeid(className)].emplace_back(#funcName, annotation); \
-            return true; \
-        }(); \
-    }
+// Initialize the static map
+std::unordered_map<std::string, std::weak_ptr<Annotation>> Annotable::annotations;
+
+#define ANNOTATE(function, ...)         \
+    function(__VA_ARGS__);              \
+    static bool function##_annotation;  \
+
+#define ANNOTATION(clazz_function, annotation)                                                                                        \
+    bool clazz_function##_annotation = (Annotable::annotations[#clazz_function] = std::shared_ptr<Annotation>(new annotation), true); \
+
 
 // Example class that will use annotations
-class MyClass : public Annotable {
+class MyClass {
 public:
     MyClass() {}
 
-    void myFunction() {
-        // Function implementation
-    }
-
-    // Annotate the function
-    ANNOTATE(MyClass, myFunction, CustomAnnotation, "This is a custom annotation")
+    void ANNOTATE(myFunction);
 };
+
+ANNOTATION(MyClass::myFunction, CustomAnnotation(""))
+void MyClass::myFunction() {
+    std::cout << "Executing myFunction" << std::endl;
+}
 
 int main() {
     MyClass myClassInstance;
     myClassInstance.myFunction();
+    
+    auto function = Annotable::getFunction<MyClass, CustomAnnotation>();
 
-    // Accessing annotations for MyClass
-    auto it = Annotable::annotations.find(typeid(MyClass));
-    if (it != Annotable::annotations.end()) {
-        for (const auto& pair : it->second) {
-            std::cout << "Function Name: " << pair.first << std::endl;
-            std::cout << "Annotation Value: " << pair.second->value << std::endl;
-        }
-    }
-    else {
-        std::cout << "No annotations found for MyClass" << std::endl;
+    for (auto&[name, annotation] : Annotable::annotations) {
+        if (auto ann = annotation.lock())
+            std::cout << name << " " << ann << std::endl;
     }
 
     return 0;
