@@ -20,12 +20,12 @@ struct CustomAnnotation : public Annotation {
 class Annotable {
 public:
     // Static map to store annotations
-    static std::unordered_map<std::string, std::weak_ptr<Annotation>> annotations;
+    static std::unordered_map<std::string, std::shared_ptr<Annotation>> annotations;
 
-    template<class Class, typename Annotation>
-    static std::function getFunction() {
-        return nullptr;
-    }
+    //template<class Class, typename Annotation>
+    //static std::function<void*> getFunction() {
+    //    return nullptr;
+    //}
 };
 
 // Helper function to create annotations
@@ -35,13 +35,13 @@ bool createAnnotation(const std::string& key, Annotation* annotation) {
 }
 
 // Initialize the static map
-std::unordered_map<std::string, std::weak_ptr<Annotation>> Annotable::annotations;
+std::unordered_map<std::string, std::shared_ptr<Annotation>> Annotable::annotations;
 
 #define ANNOTATE(function, ...)         \
     function(__VA_ARGS__);              \
     static bool function##_annotation;  \
 
-#define ANNOTATION(clazz_function, annotation)                                                                                        \
+#define ANNOTATION(clazz_function, annotation)                                                                                               \
     bool clazz_function##_annotation = (Annotable::annotations[#clazz_function] = std::shared_ptr<Annotation>(new annotation), true); \
 
 
@@ -53,7 +53,7 @@ public:
     void ANNOTATE(myFunction);
 };
 
-ANNOTATION(MyClass::myFunction, CustomAnnotation(""))
+ANNOTATION(MyClass::myFunction, CustomAnnotation("Something"))
 void MyClass::myFunction() {
     std::cout << "Executing myFunction" << std::endl;
 }
@@ -62,11 +62,10 @@ int main() {
     MyClass myClassInstance;
     myClassInstance.myFunction();
     
-    auto function = Annotable::getFunction<MyClass, CustomAnnotation>();
+    //auto function = Annotable::getFunction<MyClass, CustomAnnotation>();
 
     for (auto&[name, annotation] : Annotable::annotations) {
-        if (auto ann = annotation.lock())
-            std::cout << name << " " << ann << std::endl;
+        std::cout << name << " " << static_cast<CustomAnnotation*>(annotation.get())->val << std::endl;
     }
 
     return 0;
